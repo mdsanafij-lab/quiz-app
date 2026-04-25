@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSC 26 Exam Portal</title>
+    <script src="https://tailwindcss.com"></script>
+    <style>
+        .option-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <!-- Password Gateway -->
+    <div id="password-screen" class="flex flex-col items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-4 text-blue-600">HSC 26 Premium Access</h2>
+            <p class="text-gray-600 mb-6">পরীক্ষা শুরু করতে পাসওয়ার্ড দিন। (পাসওয়ার্ডের জন্য আমাকে ইনবক্স করো)</p>
+            <input type="password" id="pass-input" placeholder="পাসওয়ার্ড লিখুন" class="w-full p-3 border rounded mb-4 focus:outline-blue-500">
+            <button onclick="checkPass()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold">প্রবেশ করুন</button>
+            <p id="pass-error" class="text-red-500 mt-2 hidden">ভুল পাসওয়ার্ড! আবার চেষ্টা করো।</p>
+        </div>
+    </div>
+
+    <!-- Main Quiz Area -->
+    <div id="quiz-container" class="hidden max-w-xl mx-auto p-4 mt-6">
+        <div class="bg-white rounded-xl shadow-xl p-6">
+            <div id="setup-area">
+                <h1 class="text-2xl font-bold text-center mb-6">বিষয় নির্বাচন করো</h1>
+                <select id="subject-filter" class="w-full p-3 border rounded-lg mb-4 text-lg font-semibold">
+                    <option value="">সাবজেক্ট লোড হচ্ছে...</option>
+                </select>
+                <button onclick="startQuiz()" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg">পরীক্ষা শুরু করো</button>
+            </div>
+
+            <div id="quiz-area" class="hidden">
+                <div class="flex justify-between mb-4 text-sm font-bold text-gray-500">
+                    <span id="progress-text"></span>
+                    <span id="score-text">স্কোর: 0</span>
+                </div>
+                <div id="question" class="text-xl font-bold mb-6 text-gray-800 leading-tight"></div>
+                <div id="options" class="grid gap-4"></div>
+                <button id="next-btn" class="hidden w-full mt-8 bg-blue-600 text-white py-3 rounded-lg font-bold">পরবর্তী প্রশ্ন</button>
+            </div>
+
+            <div id="result-area" class="hidden text-center">
+                <h2 class="text-3xl font-bold text-blue-600 mb-2">ফলাফল</h2>
+                <p id="final-score" class="text-2xl font-bold mb-6"></p>
+                <div id="wrong-review" class="text-left bg-red-50 p-4 rounded-lg overflow-y-auto max-h-64 mb-6"></div>
+                <button onclick="location.reload()" class="w-full bg-gray-800 text-white py-3 rounded-lg font-bold">আবার পরীক্ষা দিন</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // তোমার লিঙ্ক এখানে সেট করা হয়েছে
+        const SHEET_URL = 'https://google.com';
+        const MY_PASSWORD = "HSC26"; // তোমার পাসওয়ার্ড এখানে পরিবর্তন করতে পারো
+
+        let allData = [], currentQuestions = [], currentIdx = 0, score = 0, mistakes = [];
+
+        function checkPass() {
+            const input = document.getElementById('pass-input').value;
+            if(input === MY_PASSWORD) {
+                document.getElementById('password-screen').classList.add('hidden');
+                document.getElementById('quiz-container').classList.remove('hidden');
+                loadData();
+            } else {
+                document.getElementById('pass-error').classList.remove('hidden');
+            }
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch(SHEET_URL);
+                const data = await response.text();
+                const rows = data.split('\n').slice(1);
+                allData = rows.map(row => {
+                    const cols = row.split(',');
+                    return { q: cols[0], opts: [cols[1], cols[2], cols[3], cols[4]], ans: cols[5], sub: cols[6] };
+                });
+                
+                const subs = [...new Set(allData.map(d => d.sub))].filter(s => s);
+                const filter = document.getElementById('subject-filter');
+                filter.innerHTML = '<option value="">নির্বাচন করো</option>';
+                subs.forEach(s => filter.innerHTML += `<option value="${s}">${s}</option>`);
+            } catch (e) {
+                alert("ডাটা লোড করতে সমস্যা হয়েছে! শিটটি Public করা আছে কি না চেক করো।");
+            }
+        }
+
+        function startQuiz() {
+            const sub = document.getElementById('subject-filter').value;
+            if(!sub) return alert('আগে সাবজেক্ট বেছে নাও!');
+            currentQuestions = allData.filter(d => d.sub.trim() === sub.trim());
+            document.getElementById('setup-area').classList.add('hidden');
+            document.getElementById('quiz-area').classList.remove('hidden');
+            showQuestion();
+        }
+
+        function showQuestion() {
+            const q = currentQuestions[currentIdx];
+            document.getElementById('progress-text').innerText = `প্রশ্ন: ${currentIdx + 1} / ${currentQuestions.length}`;
+            document.getElementById('question').innerText = q.q;
+            const optDiv = document.getElementById('options');
+            optDiv.innerHTML = '';
+            
+            q.opts.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "option-btn p-4 border-2 border-gray-200 rounded-xl text-left font-semibold hover:border-blue-500 hover:bg-blue-50 transition-all";
+                btn.innerText = opt;
+                btn.onclick = () => checkAnswer(opt, btn);
+                optDiv.appendChild(btn);
+            });
+            document.getElementById('next-btn').classList.add('hidden');
+        }
+
+        function checkAnswer(selected, btn) {
+            const correct = currentQuestions[currentIdx].ans.trim();
+            const btns = document.querySelectorAll('.option-btn');
+            btns.forEach(b => b.disabled = true);
+            
+            if(selected.trim() === correct) {
+                score++;
+                btn.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
+                document.getElementById('score-text').innerText = `স্কোর: ${score}`;
+            } else {
+                btn.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+                mistakes.push({q: currentQuestions[currentIdx].q, a: correct});
+                btns.forEach(b => {
+                    if(b.innerText.trim() === correct) b.classList.add('bg-green-100', 'border-green-500');
+                });
+            }
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
+
+        document.getElementById('next-btn').onclick = () => {
+            currentIdx++;
+            if(currentIdx < currentQuestions.length) showQuestion();
+            else showFinalResult();
+        };
+
+        function showFinalResult() {
+            document.getElementById('quiz-area').classList.add('hidden');
+            document.getElementById('result-area').classList.remove('hidden');
+            document.getElementById('final-score').innerText = `${score} / ${currentQuestions.length}`;
+            
+            if(mistakes.length > 0) {
+                let html = '<h3 class="font-bold mb-2 border-bottom">ভুল প্রশ্নগুলো রিভিশন দাও:</h3>';
+                mistakes.forEach(m => {
+                    html += `<div class="mb-3 p-2 border-b">
+                                <p class="font-bold text-gray-800">Q: ${m.q}</p>
+                                <p class="text-green-600 font-bold">Ans: ${m.a}</p>
+                             </div>`;
+                });
+                document.getElementById('wrong-review').innerHTML = html;
+            } else {
+                document.getElementById('wrong-review').innerHTML = "অভিনন্দন! সব উত্তর সঠিক হয়েছে।";
+            }
+        }
+    </script>
+</body>
+  </html>
+
